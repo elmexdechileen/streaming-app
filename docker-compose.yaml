@@ -15,6 +15,7 @@ services:
       KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 1
       KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 1
       KAFKA_JMX_PORT: 9101
+      KAFKA_AUTO_CREATE_TOPICS_ENABLE: 'true'
       KAFKA_JMX_HOSTNAME: localhost
       KAFKA_PROCESS_ROLES: 'broker,controller'
       KAFKA_CONTROLLER_QUORUM_VOTERS: '1@kafka:29093'
@@ -42,30 +43,34 @@ services:
 
   flink:
     container_name: flink
-    image: flink:1.11.2
+    build: ./flink
     ports:
       - "8081:8081"
     command: jobmanager
     environment:
       - JOB_MANAGER_RPC_ADDRESS=flink
       - KAFKA_BOOTSTRAP_SERVERS=kafka:29092
+      - FLINK_PLUGINS_DIR=/opt/flink/lib
     depends_on:
       - kafka
 
   taskmanager:
     container_name: taskmanager
-    image: flink:1.11.2
+    build: ./flink
     depends_on:
       - flink
     command: taskmanager
     environment:
       - JOB_MANAGER_RPC_ADDRESS=flink 
 
-  cassandra:
-    container_name: cassandra
-    image: cassandra:3.11
+  postgres:
+    container_name: postgres
+    image: postgres:latest
     ports:
-      - "9042:9042"
+      - "5432:5432"
+    environment:
+      POSTGRES_USER: flink
+      POSTGRES_PASSWORD: postgres
 
   control-center:
     container_name: control-center
@@ -100,8 +105,31 @@ services:
   processor:
     container_name: processor
     build: ./processor
+    volumes:
+      - ./processor/app/main.py:/app/main.py
     env_file:
       - example.env
     depends_on:
       - kafka
       - mocker-service
+      - postgres
+
+  sqlpad:
+    container_name: sqlpad
+    image: sqlpad/sqlpad:latest
+    ports:
+      - "3000:3000"
+    environment:
+      SQLPAD_ALLOW_ANONYMOUS: true
+      SQLPAD_ADMIN: 'admin@sqlpad.com'
+      SQLPAD_ADMIN_PASSWORD: 'admin'
+      SQLPAD_CONNECTIONS__pgdemo__name: Flink data
+      SQLPAD_CONNECTIONS__pgdemo__driver: postgres
+      SQLPAD_CONNECTIONS__pgdemo__host: postgres
+      SQLPAD_CONNECTIONS__pgdemo__database: postgres
+      SQLPAD_CONNECTIONS__pgdemo__username: flink
+      SQLPAD_CONNECTIONS__pgdemo__password: postgres
+      SQLPAD_CONNECTIONS__pgdemo__multiStatementTransactionEnabled: 'true'
+      SQLPAD_CONNECTIONS__pgdemo__idleTimeoutSeconds: 86400
+    depends_on:
+      - postgres

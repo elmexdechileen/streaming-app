@@ -1,106 +1,134 @@
-from pyflink.datastream import StreamExecutionEnvironment
-from pyflink.datastream.connectors import FlinkKafkaConsumer
-from pyflink.common.serialization import SimpleStringSchema
-from pyflink.datastream import TimeCharacteristic
-from pyflink.datastream import window  # Correct import
-from pyflink.datastream.functions import AggregateFunction
-from pyflink.common import Types
-from pyflink.common.time import Time
-from datetime import datetime
-from pyflink.datastream.connectors import CassandraSink
+from pyflink.table import EnvironmentSettings, StreamTableEnvironment
+from sqlalchemy import create_engine, Column, Float, DateTime, Integer
+from sqlalchemy.ext.declarative import declarative_base
+from sqlalchemy.orm import sessionmaker
+import datetime
+
+# Define the base for declarative class definitions
+Base = declarative_base()
 
 
-def process_weather_data(message):
-    data = json.loads(message)
-    lat = data["lat"]
-    lon = data["lon"]
-    minutely_data = data["minutely"]
+# Create tables in PostgreSQL using SQLAlchemy
+# Define the table structure using SQLAlchemy ORM
+class WeatherSinkTable(Base):
+    __tablename__ = "weather_sink_table"
 
-    for entry in minutely_data:
-        dt = entry["dt"]
-        precipitation = entry["precipitation"]
-        print(f"Timestamp: {dt}, Precipitation: {precipitation}")
+    # Define primary key
+    id = Column(Integer, primary_key=True, autoincrement=True)
 
-
-class PrecipitationAggregator(AggregateFunction):
-    def create_accumulator(self):
-        return 0.0
-
-    def add(self, value, accumulator):
-        return accumulator + value
-
-    def get_result(self, accumulator):
-        return accumulator
-
-    def merge(self, a, b):
-        return a + b
-
-
-def extract_precipitation(message):
-    data = json.loads(message)
-    minutely_data = data["minutely"]
-    results = []
-    for entry in minutely_data:
-        dt = entry["dt"]
-        precipitation = entry["precipitation"]
-        results.append((dt, precipitation))
-    return results
-
-
-def main():
-    env = StreamExecutionEnvironment.get_execution_environment()
-    env.set_stream_time_characteristic(TimeCharacteristic.EventTime)
-
-    # Example Kafka Consumer configuration
-    kafka_consumer = FlinkKafkaConsumer(
-        topics="weather",
-        deserialization_schema=SimpleStringSchema(),
-        properties={"bootstrap.servers": "kafka:29092", "group.id": "weather_group"},
+    dt = Column(
+        DateTime(timezone=True), nullable=False, default=datetime.datetime.utcnow
     )
+    precipitation = Column(Float, nullable=False)
 
-    # Data stream from Kafka
-    weather_stream = env.add_source(kafka_consumer)
 
-    # Extract precipitation data and map it
-    weather_stream = weather_stream.flat_map(
-        lambda message: extract_precipitation(message),
-        output_type=Types.TUPLE([Types.LONG(), Types.FLOAT()]),
+# Define the table structure for hourly aggregated precipitation
+class WeatherHourlyTable(Base):
+    __tablename__ = "weather_hourly"
+
+    # Define primary key
+    id = Column(Integer, primary_key=True, autoincrement=True)
+
+    event_hour = Column(
+        DateTime(timezone=True), nullable=False, default=datetime.datetime.utcnow
     )
+    total_precipitation = Column(Float, nullable=False)
 
-    # Watermark strategy: Using a simple timestamp extractor for Flink 1.16
-    weather_stream = weather_stream.assign_timestamps_and_watermarks(
-        WatermarkStrategy.for_monotonous_timestamps().with_timestamp_assigner(  # Simple watermark strategy
-            lambda x, _: x[0]
-        )  # Using the timestamp from the tuple (dt)
+
+# Connect to PostgreSQL database
+DATABASE_URL = "postgresql://flink:postgres@postgres:5432/postgres"
+engine = create_engine(DATABASE_URL, echo=True)
+
+# Create the tables in the database
+Base.metadata.create_all(engine)
+
+
+# Set up the StreamTableEnvironment in streaming mode
+env_settings = EnvironmentSettings.in_streaming_mode()
+table_env = StreamTableEnvironment.create(environment_settings=env_settings)
+
+# Kafka source configuration (unchanged)
+table_env.execute_sql(
+    """
+    CREATE TABLE weather_source (
+        lat DOUBLE,
+        lon DOUBLE,
+        minutely ARRAY<ROW<dt BIGINT, precipitation FLOAT>>,
+        timezone STRING,
+        timezone_offset INT
+    ) WITH (
+        'connector' = 'kafka',
+        'topic' = 'weather',
+        'properties.bootstrap.servers' = 'kafka:29092',
+        'properties.group.id' = 'weather_group',
+        'format' = 'json',
+        'scan.startup.mode' = 'latest-offset'
     )
+    """
+)
 
-    # Key by hourly timestamp and apply tumbling window
-    weather_hourly = (
-        weather_stream.key_by(
-            lambda x: datetime.fromtimestamp(x[0]).strftime("%Y-%m-%d %H:00:00")
-        )
-        .window(
-            window.TumblingEventTimeWindows.of(Time.hours(1))
-        )  # Correct window import for 1.16
-        .aggregate(PrecipitationAggregator(), output_type=Types.FLOAT())
+# PostgreSQL sink configuration for processed data (flattened)
+table_env.execute_sql(
+    """
+    CREATE TABLE weather_sink (
+        dt TIMESTAMP(3),
+        precipitation FLOAT,
+        WATERMARK FOR dt AS dt - INTERVAL '0' SECOND
+    ) WITH (
+        'connector' = 'jdbc',
+        'url' = 'jdbc:postgresql://postgres:5432/postgres',
+        'table-name' = 'weather_sink_table',
+        'username' = 'flink',
+        'password' = 'postgres',
+        'driver' = 'org.postgresql.Driver',
+        'sink.buffer-flush.max-rows' = '1000',
+        'sink.buffer-flush.interval' = '1s'
     )
+    """
+)
 
-    # Format the result for Cassandra
-    weather_hourly = weather_hourly.map(
-        lambda x: (datetime.fromtimestamp(x[0]).strftime("%Y-%m-%d %H:00:00"), x[1])
+# Create a new table for hourly aggregated precipitation (PostgreSQL sink)
+table_env.execute_sql(
+    """
+    CREATE TABLE weather_hourly (
+        event_hour TIMESTAMP(3),
+        total_precipitation FLOAT
+    ) WITH (
+        'connector' = 'jdbc',
+        'url' = 'jdbc:postgresql://postgres:5432/postgres',
+        'table-name' = 'weather_sink_table',
+        'username' = 'flink',
+        'password' = 'postgres',
+        'driver' = 'org.postgresql.Driver',
+        'sink.buffer-flush.max-rows' = '1000',
+        'sink.buffer-flush.interval' = '1s'
     )
+    """
+)
 
-    # Set up Cassandra Sink
-    cassandra_sink = CassandraSink.add_sink(weather_hourly)
-    cassandra_sink.set_query(
-        "INSERT INTO weather_data.hourly (timestamp, precipitation) VALUES (?, ?);"
-    )
-    cassandra_sink.set_host("cassandra:9042")
-    cassandra_sink.build()
+# Process data by unnesting the 'minutely' array and casting dt to TIMESTAMP
+table_env.execute_sql(
+    """
+    INSERT INTO weather_sink
+    SELECT
+        TO_TIMESTAMP(FROM_UNIXTIME(f.dt), 'yyyy-MM-dd HH:mm:ss') AS dt,
+        f.precipitation
+    FROM weather_source,
+    UNNEST(weather_source.minutely) AS f (dt, precipitation)
+    """
+)
 
-    # Execute the Flink job
-    env.execute("Weather Data Processing")
+table_env.execute_sql(
+    """
+    INSERT INTO weather_hourly
+    SELECT
+        TUMBLE_START(dt, INTERVAL '1' HOUR) AS event_hour,
+        SUM(precipitation) AS total_precipitation
+    FROM weather_sink
+    GROUP BY TUMBLE(dt, INTERVAL '1' HOUR)
 
+    """
+)
 
-if __name__ == "__main__":
-    main()
+# Print a message to indicate job submission
+print("Start processing")
