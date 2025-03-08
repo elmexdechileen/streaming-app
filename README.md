@@ -37,7 +37,7 @@ The system is designed to handle high volumes of data efficiently, providing tim
 - KRaft: Uses Kafka Raft (KRaft) mode, eliminating the need for Zookeeper.
 
 ## Notes
-- Use either the mock service or the actual API, defined in `example.env`.
+- Use either the mock service or the actual API, defined in `example.env`. You do need to have an api key for Openweathermap though.
 - URLs:
     - [Apache Flink Dashboard](http://localhost:8081/)
     - [Kafka Control Center](http://localhost:8081/)
