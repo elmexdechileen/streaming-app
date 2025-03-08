@@ -42,6 +42,7 @@ The system is designed to handle high volumes of data efficiently, providing tim
     - [Apache Flink Dashboard](http://localhost:8081/)
     - [Kafka Control Center](http://localhost:8081/)
     - [Sqlpad](http://localhost:3000/) (sign in with `admin@sqlpad.com` and `admin` as password)
+- Everything was build on an Intel x86 machine (no ARM!) OS details: Microsoft Windows 11 Pro Version 10.0.26100 Build 26100
 
 ## Shortcomings
 - The only main issue I have is that the hourly aggregation doesn't work properly (this is one of the main functions but I simply
