@@ -46,7 +46,7 @@ The system is designed to handle high volumes of data efficiently, providing tim
 
 ## Screenshots
 ![Flink Dashboard](./screenshots/flink.png)
-![Kafka Control Center](./screenshots/kafka.png)
+![Kafka Control Center](./screenshots/confluent_control_center.png)
 ![Sqlpad Sink Unnested](./screenshots/sqlpad_sink_unnested.png)
 ![Sqlpad Weather Hourly](./screenshots/sqlpad_weather_hourly.png)
 ![Confluent Control Center](./screenshots/confluent_control_center.png)
