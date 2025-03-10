@@ -91,7 +91,7 @@ services:
     container_name: mocker-service
     build: ./mock-service
     ports:
-      - "5000:5000"
+      - "5001:5000"
 
   event-producer:
     container_name: event-producer
