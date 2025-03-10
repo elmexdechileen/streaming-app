@@ -44,6 +44,13 @@ The system is designed to handle high volumes of data efficiently, providing tim
     - [Sqlpad](http://localhost:3000/) (sign in with `admin@sqlpad.com` and `admin` as password)
 - Everything was build on an Intel x86 machine (no ARM!) OS details: Microsoft Windows 11 Pro Version 10.0.26100 Build 26100
 
+## Screenshots
+![Flink Dashboard](./screenshots/flink.png)
+![Kafka Control Center](./screenshots/kafka.png)
+![Sqlpad Sink Unnested](./screenshots/sqlpad_sink_unnested.png)
+![Sqlpad Weather Hourly](./screenshots/sqlpad_weather_hourly.png)
+![Confluent Control Center](./screenshots/confluent_control_center.png)
+
 ## Shortcomings
 - The only main issue I have is that the hourly aggregation doesn't work properly (this is one of the main functions but I simply
 had no time to debug anymore), it only aggregates over an entire hour so it takes long to see the results
