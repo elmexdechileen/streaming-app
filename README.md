@@ -3,6 +3,19 @@ The system is designed to handle high volumes of data efficiently, providing tim
 
 ## Overview
 
+When I design applications like this I try to adhere to these principles:
+- Use as much standardized technology as possible: this creates a future proof solution
+and helps to keep an overview. In addition it will be easier for someone else to
+contribute to the project.
+- Elegant code: I am a big fan of elegance in code (and things such as Code Golf). But in Data Engineering for me an elegant pipeline means a short and effective pipeline. With standardized 
+connectors and using technologies that fit well together you can create lean and mean pipelines.
+- Scalability by design: One of the big revolutions during the big data craze were the improvements
+in horizontal scaling compute frameworks. Even though these are projects with a minimal amount of data it's important always to think about how this will scale for larger data sets. Kafka, Flink and 
+Postgresql are all technologies that have proven themselves to work with high volume and velocity data
+sets.
+- Engineering mindset: It's crucial to approach data engineering with a mindset focused on creating robust and reliable code. This means writing code that is not only functional but also maintainable, testable, and scalable. 
+
+
 ```
 ┌───────────────────┐    ┌──────────────────┐
 │                   │    │                  │
